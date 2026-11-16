@@ -36,7 +36,8 @@
 │   ├── index.html            页面结构
 │   ├── assets/css/style.css  样式（Q 版规范）
 │   ├── assets/js/game.js     纯逻辑：棋盘、移动、合并、计分、撤销
-│   ├── assets/js/app.js      界面层：渲染、动画、键盘与滑动、遮罩、提示
+│   ├── assets/js/sound.js    音效层：Web Audio 现场合成，不加载音频文件
+│   ├── assets/js/app.js      界面层：渲染、动画、粒子、彩带、键盘与滑动、遮罩、提示
 │   └── test/game.test.js     逻辑单元测试，14 项
 ├── win/                      Windows 外壳（C++ + WebView2）
 │   ├── main.cpp              开窗口、挂虚拟域名、加载页面
@@ -145,6 +146,12 @@ $env:GRADLE_USER_HOME = "G:\dev\gradle-home"
 8. **老内核的兼容写法**
    `aspect-ratio` 和 `inset` 在 Chromium 88 以下的 WebView 上会失效，棋盘会塌成一条线。CSS 里给了 `@supports not (aspect-ratio: 1/1)` 的 padding 兜底，`inset: 0` 一律写成 `top/right/bottom/left`。
 
+9. **动效元素的颜色别从它要离开的那个物件上取**
+   合并粒子最初直接用合并方块的背景色，结果粒子一出生就融在同色方块里，肉眼完全看不见。改成白 / 金交替配深棕描边才跳得出来。凡是「从 A 处喷出、脱离 A 的」效果，配色要按**脱离后落在什么底上**来选。
+
+10. **音效合成比塞音频文件更适合多端共用**
+   Web Audio 现场生成，零体积、零路径依赖、离线必然可用；Windows 与安卓套壳各自不用多带一份二进制资源。代价是两个坑要处理：一是音频必须由用户手势解锁（首次 `pointerdown`/`keydown` 里 `resume()`），二是无声卡时构造函数会抛异常，得包 `try` 静默降级。
+
 ---
 
 ## 七、开发环境
@@ -181,3 +188,4 @@ $env:GRADLE_USER_HOME = "G:\dev\gradle-home"
 | 2026-11-16 | v0.4 | 安卓外壳：Gradle 工程 + `MainActivity`，`assembleDebug` 通过，产出 24.7 KB APK |
 | 2026-11-16 | v0.5 | 模拟器实测：滑动、键盘、合并、计分、撤销、最高分落盘、新游戏二次确认全部通过；补老内核兼容写法，去掉按钮焦点描边，棋盘放大到 480px |
 | 2026-11-16 | v0.6 | 修字号：`--cell-px` 独立推算真实像素，字号不再吃百分比；PC 窗口 430×730 → 520×740 让棋盘在三端都是 480；出应用图标（1024 母版 + `.ico` 多尺寸 + 安卓 5 档 mipmap + favicon），图标未嵌入两端 |
+| 2026-11-16 | v0.7 | 手感与声音：合并改「压扁回弹」+ 棋盘轻震；`sound.js` 用 Web Audio 合成移动/合并/胜利/失败音效（含静音开关与手势解锁）；合并喷粒子、胜利落彩带；底部署名「某好心市民」 |

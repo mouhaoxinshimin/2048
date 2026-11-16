@@ -8,6 +8,7 @@
 
   var G = window.Game2048;
   var SIZE = G.SIZE;
+  var SND = window.Sound2048 || { unlock: function () {}, move: function () {}, merge: function () {}, win: function () {}, lose: function () {}, isOn: function () { return false; }, toggle: function () { return false; } };
 
   /* 棋盘几何，必须与 style.css 里的 --pad / --gap / --cell 保持一致 */
   var PAD = 3.2;
@@ -40,6 +41,7 @@
   var bestEl = document.getElementById('best');
   var btnNew = document.getElementById('btnNew');
   var btnUndo = document.getElementById('btnUndo');
+  var btnSound = document.getElementById('btnSound');
   var mask = document.getElementById('mask');
   var maskBig = document.getElementById('maskBig');
   var maskSub = document.getElementById('maskSub');
@@ -186,6 +188,95 @@
     btnUndo.disabled = busy || !game.canUndo();
   }
 
+  /* ---------- 粒子、彩带、撞击 ---------- */
+
+  var MAX_PARTICLES = 80;
+  var liveParticles = 0;
+  var CONFETTI_COLORS = ['#FF9EC4', '#FFE066', '#8FC9FF', '#7ED9A0', '#C4A8FF', '#FFB067'];
+
+  /* 某一格在棋盘内的中心点，全部用棋盘自身尺寸换算，不依赖窗口绝对值 */
+  function cellCenter(r, c) {
+    var box = board.getBoundingClientRect();
+    var w = box.width, h = box.height;
+    var cellPx = w * CELL / 100;
+    return {
+      x: w * (PAD + c * (CELL + GAP)) / 100 + cellPx / 2,
+      y: h * (PAD + r * (CELL + GAP)) / 100 + cellPx / 2,
+      size: cellPx
+    };
+  }
+
+  function spray(r, c, color, count) {
+    if (liveParticles >= MAX_PARTICLES) return;
+    var p = cellCenter(r, c);
+    for (var i = 0; i < count; i++) {
+      if (liveParticles >= MAX_PARTICLES) break;
+      var el = document.createElement('i');
+      el.className = 'pt';
+      var ang = Math.PI * 2 * (i / count) + Math.random() * 0.35;
+      var dist = p.size * (0.34 + Math.random() * 0.48);
+      var size = Math.max(3, p.size * (0.06 + Math.random() * 0.07));
+      el.style.left = p.x.toFixed(1) + 'px';
+      el.style.top = p.y.toFixed(1) + 'px';
+      el.style.width = size.toFixed(1) + 'px';
+      el.style.height = size.toFixed(1) + 'px';
+      el.style.background = color;
+      el.style.setProperty('--dx', (Math.cos(ang) * dist).toFixed(1) + 'px');
+      el.style.setProperty('--dy', (Math.sin(ang) * dist).toFixed(1) + 'px');
+      el.style.animationDelay = (Math.random() * 40).toFixed(0) + 'ms';
+      board.appendChild(el);
+      liveParticles++;
+      clearParticleLater(el);
+    }
+  }
+
+  function clearParticleLater(node) {
+    window.setTimeout(function () {
+      if (node.parentNode) node.parentNode.removeChild(node);
+      liveParticles--;
+    }, 560);
+  }
+
+  /* 胜利彩带，从屏幕上方飘下来 */
+  function confetti() {
+    for (var i = 0; i < 30; i++) {
+      var el = document.createElement('i');
+      el.className = 'confetti';
+      el.style.left = (Math.random() * 100).toFixed(1) + '%';
+      el.style.width = (6 + Math.random() * 6).toFixed(1) + 'px';
+      el.style.height = (10 + Math.random() * 10).toFixed(1) + 'px';
+      el.style.background = CONFETTI_COLORS[i % CONFETTI_COLORS.length];
+      el.style.animationDuration = (1.6 + Math.random() * 1.4).toFixed(2) + 's';
+      el.style.animationDelay = (Math.random() * 0.7).toFixed(2) + 's';
+      el.style.setProperty('--sway', (Math.random() * 60 - 30).toFixed(0) + 'px');
+      document.body.appendChild(el);
+      clearConfettiLater(el);
+    }
+  }
+
+  function clearConfettiLater(node) {
+    window.setTimeout(function () {
+      if (node.parentNode) node.parentNode.removeChild(node);
+    }, 3600);
+  }
+
+  /* 合并时的挤压回弹，比单纯放大更像「撞上了」 */
+  function bump(el) {
+    el.classList.remove('bump');
+    void el.offsetWidth;
+    el.classList.add('bump');
+  }
+
+  /* 整块棋盘跟着震一下，幅度很小，只为给一点手感 */
+  function shakeBoard() {
+    board.classList.remove('shake');
+    void board.offsetWidth;
+    board.classList.add('shake');
+    window.setTimeout(function () {
+      board.classList.remove('shake');
+    }, 240);
+  }
+
   /* ---------- 走一步 ---------- */
 
   function doMove(dir) {
@@ -194,6 +285,8 @@
 
     var res = game.move(dir);
     if (!res.moved) return;
+
+    SND.move();
 
     busy = true;
     btnUndo.disabled = true;
@@ -230,9 +323,18 @@
         var intoEl = tileEls[res.pairs[k].into.id];
         if (intoEl) {
           paintKeepAnim(intoEl, res.pairs[k].into.v);
-          pop(intoEl);
+          bump(intoEl);
         }
+
+        // 每合一次喷一圈小粒子。颜色不用方块自身色，
+        // 那会和方块糊成一片；改用白／金交替，配深棕描边才跳得出来
+        var intoPos = posMap[res.pairs[k].into.id];
+        if (intoPos) spray(intoPos[0], intoPos[1], k % 2 ? '#FFC93C' : '#FFFFFF', 8);
+        SND.merge(res.pairs[k].into.v);
       }
+
+      // 一次移动里有合并，棋盘震一下，幅度随合并次数略增
+      if (res.pairs.length > 0) shakeBoard();
 
       // 新方块冒出来
       if (res.spawned) {
@@ -249,8 +351,11 @@
       updateButtons();
 
       if (res.won) {
+        SND.win();
+        confetti();
         showMask('win');
       } else if (game.over) {
+        SND.lose();
         showMask('lose');
       }
     }, SLIDE_MS);
@@ -424,11 +529,39 @@
 
   btnUndo.addEventListener('click', doUndo);
 
+  /* ---------- 声音开关 ---------- */
+
+  function refreshSoundBtn() {
+    var on = SND.isOn();
+    btnSound.textContent = on ? '声音' : '静音';
+    if (on) btnSound.classList.remove('off');
+    else btnSound.classList.add('off');
+  }
+
+  btnSound.addEventListener('click', function () {
+    SND.toggle();
+    refreshSoundBtn();
+    toast(SND.isOn() ? '声音已打开' : '已静音');
+  });
+
+  /* 浏览器要求音频必须由用户手势启动，任意一次按下就先解锁 */
+  function unlockOnce() {
+    SND.unlock();
+    document.removeEventListener('pointerdown', unlockOnce);
+    document.removeEventListener('keydown', unlockOnce);
+    document.removeEventListener('touchstart', unlockOnce);
+  }
+
+  document.addEventListener('pointerdown', unlockOnce);
+  document.addEventListener('keydown', unlockOnce);
+  document.addEventListener('touchstart', unlockOnce);
+
   /* 窗口尺寸变化时不用重算，位置全是百分比 */
 
   /* ---------- 启动 ---------- */
 
   buildSlots();
   renderAll();
+  refreshSoundBtn();
 
 }());

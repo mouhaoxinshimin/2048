@@ -35,6 +35,7 @@
   <div class="toolbar">
     <button class="btn new-game" id="btnNew" type="button">新游戏</button>
     <button class="btn undo" id="btnUndo" type="button" disabled>撤销</button>
+    <button class="btn sound" id="btnSound" type="button">声音</button>
   </div>
 
   <div class="board-wrap">
@@ -50,7 +51,10 @@
     </div>
   </div>
 
-  <div class="foot">方向键 / 滑动 移动方块</div>
+  <div class="foot">
+    <span class="hint">方向键 / 滑动 移动方块</span>
+    <span class="sign">某好心市民</span>
+  </div>
 
 </div>
 
@@ -69,6 +73,7 @@
 <div class="toast" id="toast"></div>
 
 <script src="assets/js/game.js"></script>
+<script src="assets/js/sound.js"></script>
 <script src="assets/js/app.js"></script>
 </body>
 </html>

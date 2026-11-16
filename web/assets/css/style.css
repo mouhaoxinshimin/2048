@@ -388,15 +388,136 @@ body {
   box-shadow: 0 4px 0 var(--ink);
 }
 
-/* ===== 底部提示 ===== */
+/* ===== 底部提示与署名 ===== */
 .foot {
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
   font-size: 11px;
   font-weight: 700;
   color: var(--ink2);
   letter-spacing: .5px;
   padding: 10px 0 2px;
   opacity: .85;
+}
+
+.foot .hint {
+  white-space: nowrap;
+}
+
+.foot .sign {
+  position: relative;
+  padding-left: 11px;
+  color: var(--ink);
+  opacity: .78;
+}
+
+/* 署名前面那道小竖线 */
+.foot .sign::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 1px;
+  height: 9px;
+  margin-top: -4.5px;
+  background: var(--ink2);
+  opacity: .5;
+}
+
+/* ===== 声音开关 ===== */
+.btn.sound {
+  background: var(--mint);
+  flex: 0 0 auto;
+  min-width: 62px;
+}
+
+.btn.sound.off {
+  background: #D9CEC2;
+  color: var(--ink2);
+}
+
+/* ===== 合并撞击：先横向压扁再回弹 ===== */
+.tile.bump {
+  animation: tileBump .24s cubic-bezier(.3, 1.6, .5, 1);
+}
+
+@keyframes tileBump {
+  0% { transform: scale(1, 1); }
+  30% { transform: scale(1.16, .84); }
+  58% { transform: scale(.92, 1.1); }
+  100% { transform: scale(1, 1); }
+}
+
+/* ===== 棋盘轻震 ===== */
+.board.shake {
+  animation: boardShake .22s ease-out;
+}
+
+@keyframes boardShake {
+  0% { transform: translate(0, 0); }
+  18% { transform: translate(-3px, 1px); }
+  38% { transform: translate(3px, -1px); }
+  58% { transform: translate(-2px, 1px); }
+  78% { transform: translate(1px, -1px); }
+  100% { transform: translate(0, 0); }
+}
+
+/* ===== 合并粒子 ===== */
+.pt {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 15;
+  transform: translate(-50%, -50%);
+  animation: ptFly .52s ease-out forwards;
+  box-shadow: 0 0 0 1.5px rgba(74, 59, 50, .35);
+}
+
+@keyframes ptFly {
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+  70% {
+    opacity: .85;
+  }
+  100% {
+    transform: translate(calc(-50% + var(--dx, 0px)), calc(-50% + var(--dy, 0px))) scale(.25);
+    opacity: 0;
+  }
+}
+
+/* ===== 胜利彩带 ===== */
+.confetti {
+  position: fixed;
+  top: -24px;
+  z-index: 40;
+  border-radius: 2px;
+  pointer-events: none;
+  border: 2px solid rgba(74, 59, 50, .3);
+  animation: confettiFall linear forwards;
+}
+
+@keyframes confettiFall {
+  0% {
+    transform: translate(0, 0) rotate(0deg);
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--sway, 0px), 104vh) rotate(560deg);
+    opacity: 0;
+  }
+}
+
+/* 用户关了系统动效就只保留必要反馈 */
+@media (prefers-reduced-motion: reduce) {
+  .pt, .confetti { display: none; }
+  .tile.bump, .board.shake { animation: none; }
 }
 
 /* ===== 确认框（页面内，不用原生 confirm） ===== */
