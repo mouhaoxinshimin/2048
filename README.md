@@ -161,6 +161,15 @@ $env:GRADLE_USER_HOME = "G:\dev\gradle-home"
    自己记了 `start = performance.now()`、帧回调里又拿 rAF 的 `now` 相减，会得到一个巨大的数，`t` 直接 ≥1，动画第一帧就被判结束、元素当场删除。表现是「节点创建后 250ms 内全部消失」。
    正确做法是**起点不自己记**，等第一帧到来时用那一帧的 `now` 赋值（`if (e.start < 0) e.start = now;`），保证整条时间轴只有一个来源。
 
+13. **给 cmd 跑的 `.bat` 必须 CRLF 行尾**
+   纯 LF 的批处理会被 cmd 当成一整行：`rem` 注释和 `set VAR=C:\Program Files (x86)\...` 全被拆开当命令执行，报出一串 `'Program' is not recognized` 之类的怪错。用 `[IO.File]::WriteAllText` 拼 `"`r`n"` 写回，别依赖编辑器默认行尾。
+
+14. **exe 的图标靠资源脚本，不靠代码**
+   写 `app.rc`（`1 ICON "路径"`）→ 编译成 `app.res` → 作为链接器输入传给 `cl`。Windows 会自动拿第一个图标资源当窗口和文件图标，不需要 `WM_SETICON`。验证办法：`[System.Drawing.Icon]::ExtractAssociatedIcon(exe)`，以及看 exe 体积增量是否与 `.res` 大小吻合。
+
+15. **adaptive icon 的前景不能缩太小**
+   108dp 画布只有中心约 66dp 是安全区，系统还要再套一层圆角遮罩。前景缩到 81% 时，实际可见内容只剩约 54%，和旁边满幅图标比明显小一圈；缩到 95% 才正常，被裁的只是边缘那一圈背景色。另外 `AndroidManifest` 里忘了写 `android:icon` 的话，前面做的图全白费——只会显示系统默认图标。
+
 ---
 
 ## 七、开发环境
@@ -180,9 +189,9 @@ $env:GRADLE_USER_HOME = "G:\dev\gradle-home"
 
 ## 八、已知待补
 
-- 图标源文件已备好（`assets/icon/`），但**还没嵌进 exe 和 APK**，两端现在仍用系统默认图标
+- **竖长屏留白偏多**：9:16 手机屏上棋盘上下各留约 310~330px 空白。页面按视口垂直居中，PC 的 520×740 下刚好，手机上被放大。是否在长屏时把内容上移，待定
+- 胜利彩带只有代码级正确，未取得画面证据（需实机打到 2048 确认）
 - release 版 APK 还没做签名配置，现在只有 debug 包
-- 安卓还没做 adaptive icon（目前只有传统方形 mipmap）
 - 没有 `LICENSE` 文件
 
 ---
@@ -199,3 +208,5 @@ $env:GRADLE_USER_HOME = "G:\dev\gradle-home"
 | 2026-11-16 | v0.6 | 修字号：`--cell-px` 独立推算真实像素，字号不再吃百分比；PC 窗口 430×730 → 520×740 让棋盘在三端都是 480；出应用图标（1024 母版 + `.ico` 多尺寸 + 安卓 5 档 mipmap + favicon），图标未嵌入两端 |
 | 2026-11-16 | v0.7 | 手感与声音：合并改「压扁回弹」+ 棋盘轻震；`sound.js` 用 Web Audio 合成移动/合并/胜利/失败音效（含静音开关与手势解锁）；合并喷粒子、胜利落彩带；底部署名「某好心市民」 |
 | 2026-11-16 | v0.8 | 修「动效看不见」：查实本机 WebView2 里提升为合成层的 CSS `animation` 不出画面，粒子/彩带/撞击/抖动全部改 `requestAnimationFrame` 逐帧驱动；同时修掉 `performance.now()` 与 rAF 时间戳混用导致动画首帧即结束的问题。粒子与撞击已获画面/数据证据，彩带待实机打到 2048 确认 |
+| 2026-11-16 | v0.9 | 换橙版图标并嵌入两端：`win/app.rc` + 链接 `.res` 让 exe 带上图标；安卓首次补 `android:icon` 与 adaptive icon（前景 95% 才够大）；修 `build.bat` 的 LF 行尾坑；`main.cpp` 520×740 终于编译进去（`GetClientRect` 实测 520×740）；产出 `dist/` 两份包 |
+

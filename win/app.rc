@@ -1,0 +1,3 @@
+// Resource script for the 2048 Windows shell.
+// Regenerate app.ico from ico.png with assets/icon generation if the artwork changes.
+1 ICON "..\\assets\\icon\\app.ico"

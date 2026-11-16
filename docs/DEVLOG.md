@@ -385,4 +385,80 @@ rAF 写样式走主线程布局与绘制，不经过合成层，也就绕开了�
 
 ---
 
+## v0.9 · 换图标、嵌入两端、打包（2026-11-16）
+
+原型确认后进入打包。本轮把用户提供的 `ico.png`（橙版棋盘图标，1536×1536 RGBA）接进去，两端首次带上正式图标。
+
+### 一、图标全套尺寸重出
+
+源图是满幅米色底（`#F4DFBF`，四角取样一致、不透明），1536×1536。重新生成：
+
+| 产出 | 尺寸 |
+|---|---|
+| `assets/icon/icon-1024.png` | 1024×1024 母版 |
+| `assets/icon/app.ico` | 16/24/32/48/64/128/256 七档 |
+| `assets/icon/favicon-16.png` / `favicon-32.png` | 16 / 32 |
+| `android/.../mipmap-{mdpi..xxxhdpi}/ic_launcher.png` | 48/72/96/144/192 |
+| `android/.../mipmap-{mdpi..xxxhdpi}/ic_launcher_foreground.png` | 108/162/216/324/432 |
+
+同名旧图（粉版）已被覆盖，全部换成本次橙版。
+
+### 二、Windows：加资源脚本把图标链进 exe
+
+新增 `win/app.rc`：
+
+```
+1 ICON "..\\assets\\icon\\app.ico"
+```
+
+`build.bat` 加一步 `rc /nologo app.rc`，再把 `app.res` 作为链接器输入传给 `cl`。exe 没显式 `WM_SETICON`，Windows 会自动取第一个图标资源作为窗口与文件图标，所以 C++ 侧不用改代码。
+
+结果：`Game2048.exe` 163,840 → 303,104 bytes，增量 139,264 与 `app.res` 大小吻合；`ExtractAssociatedIcon` 能取到图形。
+
+### 三、安卓：首次补 adaptive icon
+
+原来 `AndroidManifest.xml` **压根没有 `android:icon`**，所以一直显示系统默认图标。本轮补三处：
+
+- `res/values/colors.xml`：`ic_launcher_background = #F4DFBF`（取自图标底色的实际取样值）
+- `res/mipmap-anydpi-v26/ic_launcher.xml` 与 `ic_launcher_round.xml`：前景 `@mipmap/ic_launcher_foreground`、背景纯色
+- Manifest 加 `android:icon="@mipmap/ic_launcher"` 与 `android:roundIcon="@mipmap/ic_launcher_round"`
+
+前景层怎么放有个坑：第一版把内容缩到画布的 **81%**，装到模拟器上一看，图标内容比旁边的应用明显小一圈 —— 因为 adaptive icon 的 108dp 画布只有中心约 66dp 是安全区，系统还会用圆角遮罩再裁一次，81% 进去等于只剩约 54%。改成 **95%** 后就正常了，裁掉的只是边缘那一圈米色。
+
+### 四、`build.bat` 必须是 CRLF（踩了个隐蔽的坑）
+
+改完 `build.bat` 后编译直接失败，报一堆莫名其妙的：
+
+```
+'依赖：VS2022' is not recognized as an internal or external command
+'Program' is not recognized as ...
+'VCVARS_FAILED' is not recognized as ...
+```
+
+查字节才发现文件是**纯 LF 行尾**（`crlf=0 / lf=25`）。`.bat` 必须 CRLF：cmd 按 CRLF 断行，LF 文件会被当成一整行——于是第二行的 `rem` 注释被拆开当命令执行，`set VSDIR=C:\Program Files (x86)\...` 也被拆成一串。用 `[IO.File]::WriteAllText` 显式写 `"`r`n"` 拼接的内容后恢复正常，`BUILD_OK`。
+
+**这条要记住：只要产物是给 cmd 跑的批处理，行尾就别交给编辑器默认行为。**
+
+### 五、打包产物
+
+| 文件 | 大小 | 内容 |
+|---|---|---|
+| `dist/Game2048-win-x64.zip` | 217,961 | `Game2048.exe` + `web/`（已排除 `web/test`） |
+| `dist/Game2048-android-debug.apk` | 652,518 | 含 5 档图标 + adaptive icon |
+
+验证：
+
+- 打包后的 `dist/win/Game2048.exe` 启动正常，`GetClientRect` 读到 **520×740**，说明 `main.cpp` 那一版窗口尺寸终于编译进去了
+- APK 装进 LDPlayer9，桌面图标已显示橙版棋盘，游戏内三按钮、署名、字号均正常
+- `app.js` 与 `game.test.js` 各 14 项逻辑测试仍全过
+
+### 六、本轮没动的
+
+- **竖长屏下棋盘上下留白偏多**：模拟器 900×1600 上，顶部工具栏到棋盘之间约 330px、棋盘到署名约 310px 空白。原因是页面按视口垂直居中，PC 的 520×740 比例下留白刚好（各约 130px），换成 9:16 就放大了。这属于响应式取舍，要不要在长屏时把内容上移需确认，本轮未改。
+- 彩带仍未获得画面证据（见 v0.8）
+- release 版未签名，只有 debug 包
+- 没有 `LICENSE` 文件
+
+---
+
 *本日志随开发进展追加，不覆盖历史记录。*
