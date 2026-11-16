@@ -152,6 +152,15 @@ $env:GRADLE_USER_HOME = "G:\dev\gradle-home"
 10. **音效合成比塞音频文件更适合多端共用**
    Web Audio 现场生成，零体积、零路径依赖、离线必然可用；Windows 与安卓套壳各自不用多带一份二进制资源。代价是两个坑要处理：一是音频必须由用户手势解锁（首次 `pointerdown`/`keydown` 里 `resume()`），二是无声卡时构造函数会抛异常，得包 `try` 静默降级。
 
+11. **别默认 CSS 动画一定能画出来**（本轮踩的坑，代价最大）
+   在这台机器（Chromium 140 的 WebView2）上，凡是会被提升为合成层的 `animation` 都**不出画面**：节点在、`opacity 1`、`z-index` 够高、`getBoundingClientRect` 也正常，就是屏幕上零像素。而 `transition` 和静态样式完全正常。
+   判定手法：把动画元素**原样复制一份 `animation: none` 的静态副本**，同一帧截图对照——静态的能看见、带动画的看不见，就锁定是动画路径的问题。注意 `animation-play-state: paused` 也照样不绘制，不能用它取证。
+   解法：动效改 `requestAnimationFrame` 逐帧写 `left/top/width/height/opacity/transform`，走主线程布局与绘制，绕开合成层。同时把 `will-change` 一起去掉，它同样会提升图层。
+
+12. **`performance.now()` 与 rAF 的时间戳不能混用**
+   自己记了 `start = performance.now()`、帧回调里又拿 rAF 的 `now` 相减，会得到一个巨大的数，`t` 直接 ≥1，动画第一帧就被判结束、元素当场删除。表现是「节点创建后 250ms 内全部消失」。
+   正确做法是**起点不自己记**，等第一帧到来时用那一帧的 `now` 赋值（`if (e.start < 0) e.start = now;`），保证整条时间轴只有一个来源。
+
 ---
 
 ## 七、开发环境
@@ -189,3 +198,4 @@ $env:GRADLE_USER_HOME = "G:\dev\gradle-home"
 | 2026-11-16 | v0.5 | 模拟器实测：滑动、键盘、合并、计分、撤销、最高分落盘、新游戏二次确认全部通过；补老内核兼容写法，去掉按钮焦点描边，棋盘放大到 480px |
 | 2026-11-16 | v0.6 | 修字号：`--cell-px` 独立推算真实像素，字号不再吃百分比；PC 窗口 430×730 → 520×740 让棋盘在三端都是 480；出应用图标（1024 母版 + `.ico` 多尺寸 + 安卓 5 档 mipmap + favicon），图标未嵌入两端 |
 | 2026-11-16 | v0.7 | 手感与声音：合并改「压扁回弹」+ 棋盘轻震；`sound.js` 用 Web Audio 合成移动/合并/胜利/失败音效（含静音开关与手势解锁）；合并喷粒子、胜利落彩带；底部署名「某好心市民」 |
+| 2026-11-16 | v0.8 | 修「动效看不见」：查实本机 WebView2 里提升为合成层的 CSS `animation` 不出画面，粒子/彩带/撞击/抖动全部改 `requestAnimationFrame` 逐帧驱动；同时修掉 `performance.now()` 与 rAF 时间戳混用导致动画首帧即结束的问题。粒子与撞击已获画面/数据证据，彩带待实机打到 2048 确认 |

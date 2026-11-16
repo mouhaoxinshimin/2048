@@ -438,41 +438,23 @@ body {
   color: var(--ink2);
 }
 
-/* ===== 合并撞击：先横向压扁再回弹 ===== */
-.tile.bump {
-  animation: tileBump .24s cubic-bezier(.3, 1.6, .5, 1);
-}
-
-@keyframes tileBump {
-  0% { transform: scale(1, 1); }
-  30% { transform: scale(1.16, .84); }
-  58% { transform: scale(.92, 1.1); }
-  100% { transform: scale(1, 1); }
-}
+/* ===== 合并撞击 ===== */
+/* 这里不写 animation。本机 WebView2 环境实测：被提升为合成层的 CSS 动画
+   不出画面（transition 正常），所以改由 app.js 用 rAF 逐帧写 transform。
+   同理不加 will-change —— 那同样会把它提到合成层。 */
 
 /* ===== 棋盘轻震 ===== */
-.board.shake {
-  animation: boardShake .22s ease-out;
-}
-
-@keyframes boardShake {
-  0% { transform: translate(0, 0); }
-  18% { transform: translate(-3px, 1px); }
-  38% { transform: translate(3px, -1px); }
-  58% { transform: translate(-2px, 1px); }
-  78% { transform: translate(1px, -1px); }
-  100% { transform: translate(0, 0); }
-}
+/* 同样交给 JS 逐帧驱动，理由见上 */
 
 /* ===== 合并粒子 ===== */
+/* 用 fixed 挂在 body 上，坐标由 JS 换算成视口位置。
+   位置和透明度都由 rAF 逐帧写，不用 CSS 动画。 */
 .pt {
-  position: absolute;
+  position: fixed;
   border-radius: 50%;
   pointer-events: none;
-  z-index: 15;
-  transform: translate(-50%, -50%);
-  animation: ptFly .52s ease-out forwards;
-  box-shadow: 0 0 0 1.5px rgba(74, 59, 50, .35);
+  z-index: 60;
+  box-shadow: 0 0 0 2px rgba(74, 59, 50, .5);
 }
 
 @keyframes ptFly {
@@ -492,32 +474,21 @@ body {
 /* ===== 胜利彩带 ===== */
 .confetti {
   position: fixed;
-  top: -24px;
+  top: 0;
+  left: 0;
   z-index: 40;
   border-radius: 2px;
   pointer-events: none;
   border: 2px solid rgba(74, 59, 50, .3);
-  animation: confettiFall linear forwards;
 }
 
-@keyframes confettiFall {
-  0% {
-    transform: translate(0, 0) rotate(0deg);
-    opacity: 1;
-  }
-  85% {
-    opacity: 1;
-  }
-  100% {
-    transform: translate(var(--sway, 0px), 104vh) rotate(560deg);
-    opacity: 0;
-  }
-}
-
-/* 用户关了系统动效就只保留必要反馈 */
+/* 系统要求「减少动效」时缩短时长、减弱幅度，但不把反馈删掉。
+   实测本条在本机生效（Windows 关闭了动画效果）。
+   现在动效由 JS 驱动，所以这里只保留必要的语义说明。 */
 @media (prefers-reduced-motion: reduce) {
-  .pt, .confetti { display: none; }
-  .tile.bump, .board.shake { animation: none; }
+  .board .tile {
+    /* 抖动本身幅度已经很小（3px 内），不再额外削减 */
+  }
 }
 
 /* ===== 确认框（页面内，不用原生 confirm） ===== */

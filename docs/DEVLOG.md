@@ -284,4 +284,105 @@
 
 ---
 
+## v0.8 · 修「动效看不见」：CSS 动画在这台机器上根本不出画面（2026-11-16）
+
+实机反馈：**碰撞没有特效动画，合并后也没有粒子、彩带动画**。查下来不是参数没调好，是整条 CSS 动画路径在本机 WebView2 里失效。
+
+### 一、症状与第一轮误判
+
+现象很怪：节点全在、属性全对、就是画面上没有。
+
+| 对象 | 报告值 | 画面 |
+|---|---|---|
+| `.pt` 粒子 | `rect 9×9`、`opacity 1`、`z-index 15`、`background rgb(255,158,196)` | 0 个粉色像素 |
+| `.confetti` 彩带 | 30 条全在 DOM、`opacity 1`、`fixed`、`z 40`、`rect (75,193)` | 该区域只有绿色文字像素 |
+| `.tile.bump` | 探针 `sawBump=true`（class 已挂上） | 用户看不到挤压 |
+
+一度怀疑是「系统开了减少动效，媒体查询把动画删掉了」，还查过注册表 `HKCU\Control Panel\Accessibility\Animation\Flags`（为空）。**这个判断是错的**——后来用探针页直接读媒体查询，`prefers-reduced-motion: reduce` 匹配结果为 `true`，系统确实关了动画效果，但把降级规则改成「减小幅度而不是删除」之后，依然看不见。
+
+### 二、决定性对照实验
+
+抓一个粒子，把它原样复制成一份完全静止的副本：
+
+```js
+copy.style.animation = 'none';
+copy.style.opacity = '1';
+```
+
+同一帧截图上：**静止副本清清楚楚是个粉色圆点压在「4」方块左上角，带动画的原件一个像素都没有。**
+
+`animation: none` 能画，有动画就不画 —— 元素、坐标、颜色、层级全都没问题，问题在动画本身。
+
+顺带踩到两个坑，记下来省下次的时间：
+
+1. **`animation-play-state: paused` 时 Chromium 也不绘制该元素**，想用「暂停」取证是取不到的，必须用 `animation: none` 的静态副本。
+2. 粒子最初 `appendChild` 到 `.board` 内部，会被 16 个 `.slot` 和方块盖住，这是「看不见」的**次要**原因。改成 `document.body` + `position: fixed` + `z-index: 60` 后层级问题解决，但动画依然不出画面，说明主因不在层级。
+
+### 三、根因（两个独立的坑叠在一起）
+
+**坑一：被提升为合成层的 CSS `animation` 在本机 WebView2 不出画面。**
+
+Chromium 140、`devicePixelRatio 1`。`transform` / `opacity` 类动画会被交给合成器线程做离线绘制，而这台机器的 WebView2 合成链路有问题——动画元素画不出来，但 `transition` 和静态样式正常（方块滑动一直是能看见的）。
+
+**坑二：`performance.now()` 和 `requestAnimationFrame` 的时间戳不是同一条时间轴。**
+
+改成 rAF 驱动之后彩带仍然 250ms 内全部消失。查出来是 `start` 用 `performance.now()` 记录、帧里拿到的是 rAF 的 `now`，两者相减得到一个很大的数，`t` 直接被算成 ≥1，第一帧就判定动画结束、删掉了节点。
+
+修法：**起点不自己记，等第一帧到来时用那一帧的 `now` 赋值。**
+
+```js
+if (e.start < 0) e.start = now;
+var t = (now - e.start) / e.dur;
+```
+
+### 四、改造：全部动效改 rAF 逐帧写样式
+
+`style.css` 里删掉全部相关 `animation` 与 `@keyframes`（`tileBump` / `boardShake` / `ptFly` / `confettiFall`），`will-change` 也一并去掉——那同样会把它提到合成层。
+
+`app.js` 新增一个极小的动效引擎：一条 `effects` 队列 + 一个 rAF 循环，每项自带时长和 `render(t)` 回调，跑完自动出队。
+
+```js
+function addEffect(dur, render) {
+  effects.push({ start: -1, dur: dur, render: render });
+  if (rafId === 0) rafId = requestAnimationFrame(runEffects);
+}
+```
+
+四种效果全部改成「按 t 算状态」：
+
+| 效果 | 逐帧写什么 | 时长 |
+|---|---|---|
+| 合并粒子 `spray` | `left/top/width/height/opacity`，沿圆周飞散并缩到 0.28 倍 | 520ms |
+| 撞击 `bump` | `transform: scale(sx, sy)`，1 → 1.16/.84 → .92/1.1 → 1 | 240ms |
+| 棋盘抖动 `shakeBoard` | `transform: translate(dx, dy)`，正弦衰减到 0 | 220ms |
+| 胜利彩带 `confetti` | `top` 下落、`left` 横摆、`rotate(560deg)`、末段淡出 | 1.6~3.0s |
+
+rAF 写样式走主线程布局与绘制，不经过合成层，也就绕开了坑一。
+
+### 五、验证情况（如实记录）
+
+已获得画面证据：
+
+- **粒子**：连拍 48 帧（每步棋后 6 帧 × 8 步），按「粉色像素数」打分，最高一帧 `pink=252`。截图上清晰可见十几个粉色圆点撒在合并方块上。
+- **撞击**：探针实测 `tile w=85 h=85` → 触发后 `w=97 h=73`，`transform: matrix(1.138, 0, 0, 0.862, 0, 0)`，横涨纵缩成立。
+
+**未获得画面证据：**
+
+- **彩带**：需要真实打到 2048 才触发，本轮没打到。用调试入口直接调 `confetti()` 时，节点数从 `n=30` 变成 `n=0` 卡在时间基准 bug 上，修掉该 bug 后窗口又被别的程序占住前台、`SetForegroundWindow` 抢不回来（`fg_matches=False`），连截 4 次都拍到无关窗口，标题通道也不通（外壳窗口标题是 `2048` 固定字符串，不跟 `document.title`）。
+- **抖动**：机制与撞击完全一致（同样 rAF 写 `transform: translate`），未单独出图。
+
+彩带这一项**不当作已验证**。它和粒子共用同一套 `addEffect` 引擎、同样的 `position: fixed` + `z-index 40` + 挂 `body`，粒子既已证明能画，彩带在逻辑上应当成立；但没看到就是没看到，需要实机打到一次 2048 再确认。
+
+### 六、清理
+
+排查期间在 `web/` 下留下 6 个探针页（`probe*.html`）和一个 `index.keep.html` 备份，**已全部删除**，未进仓库。`app.js` 里的 `window.PROBE_FX` 调试钩子也已移除。
+
+### 七、本轮仍未打包
+
+- `win/main.cpp` 520×740 仍未编译
+- 图标未嵌入 exe / APK
+- APK 未重建，`dist/` 两份产物仍过时
+
+---
+
 *本日志随开发进展追加，不覆盖历史记录。*

@@ -192,16 +192,57 @@
 
   var MAX_PARTICLES = 80;
   var liveParticles = 0;
+  var PARTICLE_COLORS = ['#FF9EC4', '#FFC93C', '#FFFFFF', '#FFC93C'];
   var CONFETTI_COLORS = ['#FF9EC4', '#FFE066', '#8FC9FF', '#7ED9A0', '#C4A8FF', '#FFB067'];
 
-  /* 某一格在棋盘内的中心点，全部用棋盘自身尺寸换算，不依赖窗口绝对值 */
+  /* ---------- 动效引擎 ----------
+   * 本机 WebView2 实测：凡是提升为合成层的 CSS 动画（animation）都不出画面，
+   * transition 却正常。所以粒子和彩带统一改成 rAF 逐帧写样式，
+   * 动画既可控也不怕环境差异。 */
+
+  var effects = [];
+  var rafId = 0;
+
+  function runEffects(now) {
+    rafId = 0;
+    for (var i = effects.length - 1; i >= 0; i--) {
+      var e = effects[i];
+      // 起点统一取第一帧的 rAF 时间戳，不和 performance.now() 混用：
+      // 两者在本机 WebView2 里不是同一条时间轴，相减会得出巨大的数，
+      // 结果就是动画第一帧就被判为结束，元素当场被删。
+      if (e.start < 0) e.start = now;
+      var t = (now - e.start) / e.dur;
+      if (t > 1) t = 1;
+      if (t < 0) t = 0;
+      e.render(t);
+      if (t >= 1) effects.splice(i, 1);
+    }
+    if (effects.length > 0) rafId = window.requestAnimationFrame(runEffects);
+  }
+
+  function addEffect(dur, render) {
+    effects.push({ start: -1, dur: dur, render: render });
+    if (rafId === 0) rafId = window.requestAnimationFrame(runEffects);
+  }
+
+  /* 缓出，让运动开头快、结尾收住 */
+  function easeOut(t) {
+    return 1 - (1 - t) * (1 - t);
+  }
+
+  /* 某一格中心的屏幕坐标。粒子挂在 body 上，所以必须换算成视口坐标，
+     不能再相对棋盘算 —— 相对棋盘会被方块和 slot 盖住。 */
   function cellCenter(r, c) {
     var box = board.getBoundingClientRect();
     var w = box.width, h = box.height;
-    var cellPx = w * CELL / 100;
+    // 棋盘有边框，百分比是相对内容盒的，这里减掉边框宽度
+    var border = 3.5;
+    var iw = w - border * 2;
+    var ih = h - border * 2;
+    var cellPx = iw * CELL / 100;
     return {
-      x: w * (PAD + c * (CELL + GAP)) / 100 + cellPx / 2,
-      y: h * (PAD + r * (CELL + GAP)) / 100 + cellPx / 2,
+      x: box.left + border + iw * (PAD + c * (CELL + GAP)) / 100 + cellPx / 2,
+      y: box.top + border + ih * (PAD + r * (CELL + GAP)) / 100 + cellPx / 2,
       size: cellPx
     };
   }
@@ -209,72 +250,117 @@
   function spray(r, c, color, count) {
     if (liveParticles >= MAX_PARTICLES) return;
     var p = cellCenter(r, c);
-    for (var i = 0; i < count; i++) {
+    var span = count || 10;
+    for (var i = 0; i < span; i++) {
       if (liveParticles >= MAX_PARTICLES) break;
       var el = document.createElement('i');
       el.className = 'pt';
-      var ang = Math.PI * 2 * (i / count) + Math.random() * 0.35;
-      var dist = p.size * (0.34 + Math.random() * 0.48);
-      var size = Math.max(3, p.size * (0.06 + Math.random() * 0.07));
-      el.style.left = p.x.toFixed(1) + 'px';
-      el.style.top = p.y.toFixed(1) + 'px';
+
+      var ang = Math.PI * 2 * (i / span) + Math.random() * 0.35;
+      var dist = p.size * (0.46 + Math.random() * 0.52);
+      var dx = Math.cos(ang) * dist;
+      var dy = Math.sin(ang) * dist;
+      // 粒子必须够大才看得见：格子 86px 时约 9~18px，再小球也看不出来
+      var size = Math.max(6, p.size * (0.10 + Math.random() * 0.11));
+
+      el.style.background = color;
+      el.style.opacity = '1';
+      document.body.appendChild(el);
+      liveParticles++;
+
+      el.style.left = (p.x - size / 2).toFixed(1) + 'px';
+      el.style.top = (p.y - size / 2).toFixed(1) + 'px';
       el.style.width = size.toFixed(1) + 'px';
       el.style.height = size.toFixed(1) + 'px';
-      el.style.background = color;
-      el.style.setProperty('--dx', (Math.cos(ang) * dist).toFixed(1) + 'px');
-      el.style.setProperty('--dy', (Math.sin(ang) * dist).toFixed(1) + 'px');
-      el.style.animationDelay = (Math.random() * 40).toFixed(0) + 'ms';
-      board.appendChild(el);
-      liveParticles++;
-      clearParticleLater(el);
-    }
-  }
 
-  function clearParticleLater(node) {
-    window.setTimeout(function () {
-      if (node.parentNode) node.parentNode.removeChild(node);
-      liveParticles--;
-    }, 560);
+      (function (node, ox, oy, osz, mvx, mvy, delay) {
+        addEffect(520, function (t) {
+          // 前 delay 比例的时间原地不动，形成错落感
+          var k = t < delay ? 0 : (t - delay) / (1 - delay);
+          k = easeOut(k);
+          var now = osz * (1 - 0.72 * k);
+          node.style.left = (ox + mvx * k - now / 2).toFixed(1) + 'px';
+          node.style.top = (oy + mvy * k - now / 2).toFixed(1) + 'px';
+          node.style.width = now.toFixed(1) + 'px';
+          node.style.height = now.toFixed(1) + 'px';
+          node.style.opacity = String(1 - k);
+          if (t >= 1) {
+            if (node.parentNode) node.parentNode.removeChild(node);
+            liveParticles--;
+          }
+        });
+      }(el, p.x, p.y, size, dx, dy, Math.random() * 0.12));
+    }
   }
 
   /* 胜利彩带，从屏幕上方飘下来 */
   function confetti() {
+    var vw = window.innerWidth;
+    var vh = window.innerHeight;
     for (var i = 0; i < 30; i++) {
       var el = document.createElement('i');
       el.className = 'confetti';
-      el.style.left = (Math.random() * 100).toFixed(1) + '%';
-      el.style.width = (6 + Math.random() * 6).toFixed(1) + 'px';
-      el.style.height = (10 + Math.random() * 10).toFixed(1) + 'px';
+
+      var w = 6 + Math.random() * 6;
+      var h = 10 + Math.random() * 10;
+      var x0 = Math.random() * (vw - 14);
+      var sway = Math.random() * 70 - 35;
+
+      el.style.width = w.toFixed(1) + 'px';
+      el.style.height = h.toFixed(1) + 'px';
       el.style.background = CONFETTI_COLORS[i % CONFETTI_COLORS.length];
-      el.style.animationDuration = (1.6 + Math.random() * 1.4).toFixed(2) + 's';
-      el.style.animationDelay = (Math.random() * 0.7).toFixed(2) + 's';
-      el.style.setProperty('--sway', (Math.random() * 60 - 30).toFixed(0) + 'px');
+      el.style.left = x0.toFixed(1) + 'px';
+      el.style.top = '-24px';
+      el.style.opacity = '1';
       document.body.appendChild(el);
-      clearConfettiLater(el);
+
+      (function (node, baseX, sw, dur, delay) {
+        addEffect(dur, function (t) {
+          if (t < delay) return;
+          var k = (t - delay) / (1 - delay);
+          node.style.top = (-24 + (vh + 48) * k).toFixed(1) + 'px';
+          node.style.left = (baseX + sw * k).toFixed(1) + 'px';
+          node.style.transform = 'rotate(' + (560 * k).toFixed(0) + 'deg)';
+          node.style.opacity = k > 0.86 ? String(1 - (k - 0.86) / 0.14) : '1';
+          if (t >= 1 && node.parentNode) node.parentNode.removeChild(node);
+        });
+      }(el, x0, sway, 1.6 + Math.random() * 1.4, Math.random() * 0.35));
     }
   }
 
-  function clearConfettiLater(node) {
-    window.setTimeout(function () {
-      if (node.parentNode) node.parentNode.removeChild(node);
-    }, 3600);
-  }
-
-  /* 合并时的挤压回弹，比单纯放大更像「撞上了」 */
+  /* 合并时的挤压回弹：先横压扁再弹回来，比单纯放大更像「撞上了」 */
   function bump(el) {
-    el.classList.remove('bump');
-    void el.offsetWidth;
-    el.classList.add('bump');
+    if (!el) return;
+    addEffect(240, function (t) {
+      var sx, sy;
+      if (t < 0.3) {
+        var a = t / 0.3;
+        easeOut(a);
+        sx = 1 + 0.16 * a;
+        sy = 1 - 0.16 * a;
+      } else if (t < 0.58) {
+        var b = (t - 0.3) / 0.28;
+        sx = 1.16 - 0.24 * b;
+        sy = 0.84 + 0.26 * b;
+      } else {
+        var d = (t - 0.58) / 0.42;
+        sx = 0.92 + 0.08 * d;
+        sy = 1.10 - 0.10 * d;
+      }
+      el.style.transform = 'scale(' + sx.toFixed(3) + ',' + sy.toFixed(3) + ')';
+      if (t >= 1) el.style.transform = '';
+    });
   }
 
   /* 整块棋盘跟着震一下，幅度很小，只为给一点手感 */
   function shakeBoard() {
-    board.classList.remove('shake');
-    void board.offsetWidth;
-    board.classList.add('shake');
-    window.setTimeout(function () {
-      board.classList.remove('shake');
-    }, 240);
+    addEffect(220, function (t) {
+      var amp = 3 * (1 - t);
+      var dx = Math.sin(t * 42) * amp;
+      var dy = Math.cos(t * 35) * amp * 0.45;
+      board.style.transform = 'translate(' + dx.toFixed(2) + 'px,' + dy.toFixed(2) + 'px)';
+      if (t >= 1) board.style.transform = '';
+    });
   }
 
   /* ---------- 走一步 ---------- */
@@ -327,9 +413,9 @@
         }
 
         // 每合一次喷一圈小粒子。颜色不用方块自身色，
-        // 那会和方块糊成一片；改用白／金交替，配深棕描边才跳得出来
+        // 那会和方块糊成一片；改用粉／金／白三色轮换，配深棕描边才跳得出来
         var intoPos = posMap[res.pairs[k].into.id];
-        if (intoPos) spray(intoPos[0], intoPos[1], k % 2 ? '#FFC93C' : '#FFFFFF', 8);
+        if (intoPos) spray(intoPos[0], intoPos[1], PARTICLE_COLORS[k % PARTICLE_COLORS.length], 10);
         SND.merge(res.pairs[k].into.v);
       }
 
