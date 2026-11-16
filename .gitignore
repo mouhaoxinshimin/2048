@@ -1,0 +1,17 @@
+# 构建产物
+win/*.obj
+win/*.res
+win/*.exe
+win/*.log
+android/**/build/
+android/.gradle/
+dist/
+
+# 本地环境配置
+local.properties
+
+# 临时与日志
+*.tmp
+*.log
+Thumbs.db
+.DS_Store
