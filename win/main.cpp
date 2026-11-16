@@ -207,7 +207,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int nCmdShow)
 
     // 2048 是竖版布局，窗口偏窄
     int cw = 430;
-    int ch = 790;
+    int ch = 730;
     if (ch > availH - 30) ch = availH - 30;
     if (cw > availW - 60) cw = availW - 60;
 
