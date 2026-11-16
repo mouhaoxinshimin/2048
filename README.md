@@ -3,6 +3,8 @@
 > 创建于 2026-11-16 · 一份原型，两套外壳：Windows 桌面版 + 安卓版
 >
 > 作者：某好心市民
+>
+> 仓库：https://github.com/mouhaoxinshimin/2048
 
 ---
 
