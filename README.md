@@ -54,6 +54,8 @@
 │           ├── java/com/mhxsm/game2048/MainActivity.java
 │           ├── res/values/{strings,themes}.xml
 │           └── assets/web/   由 syncWeb 任务生成，不入库
+├── assets/icon/               应用图标源文件（1024 母版 + app.ico + 安卓 mipmap + favicon）
+├── .creative-design/          图标设计 Brief 与画布记录
 └── docs/
     └── DEVLOG.md             开发日志
 ```
@@ -130,10 +132,17 @@ $env:GRADLE_USER_HOME = "G:\dev\gradle-home"
 4. **坐标全用百分比，不用像素**
    `PAD / GAP / CELL` 三个常量同时写在 `app.js` 和 CSS 的 `--pad / --gap / --cell` 里，这是唯一需要人工同步的地方。好处是窗口怎么缩放、手机上什么分辨率，方块位置都不用重算。
 
-5. **两端外壳都不内嵌资源，共用同一份 `web/`**
+5. **百分比不能拿来算字号**（本轮踩的坑，值得记住）
+   同一个 `21.75%` 用在 `width` 上按包含块宽度解析（得到 103px，对的），用在 `font-size` 上却按**父元素字号**解析（16px×21.75% ≈ 3.5px）。`calc(var(--cell) * 1.02)` 这种写法看起来合理，实际会把字号压成个位数像素，而且父元素字号一变就跟着漂。
+   字号必须有一套独立的真实像素来源。本项目用 `var(--cell-px)`：先给 `103px` 兜底，再用 `min(calc((100vw - 39px) * 0.2175), 103px)` 由视口推算，全程不依赖 JS 和 resize 监听。
+
+6. **窗口尺寸要向设计稿看齐，别让外壳决定棋盘大小**
+   棋盘是 `min(容器宽, 480px)`，所以外壳客户区一旦小于 512px，棋盘就会被它截小，表现成「三端不一样大」而其实样式完全没错。写外壳时按 `棋盘宽 + 页边 + 边框` 反推窗口尺寸（本项目 480 + 32 + 8 = 520 × 740）。
+
+7. **两端外壳都不内嵌资源，共用同一份 `web/`**
    Windows 用 `SetVirtualHostNameToFolderMapping` 把目录挂成 https 源，安卓用 Gradle 的 `syncWeb` 任务在构建前拷贝。两处都保证「改一次页面，三端同时生效」。
 
-6. **老内核的兼容写法**
+8. **老内核的兼容写法**
    `aspect-ratio` 和 `inset` 在 Chromium 88 以下的 WebView 上会失效，棋盘会塌成一条线。CSS 里给了 `@supports not (aspect-ratio: 1/1)` 的 padding 兜底，`inset: 0` 一律写成 `top/right/bottom/left`。
 
 ---
@@ -155,8 +164,9 @@ $env:GRADLE_USER_HOME = "G:\dev\gradle-home"
 
 ## 八、已知待补
 
-- 两端都还没有应用图标（`.exe` 用系统默认图标，APK 用默认图标）
+- 图标源文件已备好（`assets/icon/`），但**还没嵌进 exe 和 APK**，两端现在仍用系统默认图标
 - release 版 APK 还没做签名配置，现在只有 debug 包
+- 安卓还没做 adaptive icon（目前只有传统方形 mipmap）
 - 没有 `LICENSE` 文件
 
 ---
@@ -170,3 +180,4 @@ $env:GRADLE_USER_HOME = "G:\dev\gradle-home"
 | 2026-11-16 | v0.3 | Windows 外壳：`win/main.cpp` + `build.bat`，编译出 `Game2048.exe` 并实测渲染正常 |
 | 2026-11-16 | v0.4 | 安卓外壳：Gradle 工程 + `MainActivity`，`assembleDebug` 通过，产出 24.7 KB APK |
 | 2026-11-16 | v0.5 | 模拟器实测：滑动、键盘、合并、计分、撤销、最高分落盘、新游戏二次确认全部通过；补老内核兼容写法，去掉按钮焦点描边，棋盘放大到 480px |
+| 2026-11-16 | v0.6 | 修字号：`--cell-px` 独立推算真实像素，字号不再吃百分比；PC 窗口 430×730 → 520×740 让棋盘在三端都是 480；出应用图标（1024 母版 + `.ico` 多尺寸 + 安卓 5 档 mipmap + favicon），图标未嵌入两端 |

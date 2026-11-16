@@ -19,10 +19,16 @@
   --track: #F0E2D2;
   --board: #F3E5D6;
 
-  /* 棋盘几何（百分比） */
+  /* 棋盘几何（百分比）—— 与 app.js 顶部 PAD/GAP/CELL 必须一致 */
   --pad: 3.2%;
   --gap: 2.2%;
   --cell: 21.75%;
+
+  /* 格子的真实像素尺寸，只用于算字号。
+     百分比变量不能拿来算 font-size（那会按父元素字号解析），所以这里直接由视口推算：
+     32px = .app 左右 padding，7px = .board 上下左右边框 */
+  --cell-px: 103px;
+  --cell-px: min(calc((100vw - 39px) * 0.2175), 103px);
 }
 
 * {
@@ -297,11 +303,12 @@ body {
 }
 
 /* 数字位数越多字号越小 */
-.tile.len1 { font-size: calc(var(--cell) * 1.02); }
-.tile.len2 { font-size: calc(var(--cell) * 0.90); }
-.tile.len3 { font-size: calc(var(--cell) * 0.72); }
-.tile.len4 { font-size: calc(var(--cell) * 0.56); }
-.tile.len5 { font-size: calc(var(--cell) * 0.46); }
+.tile.len1 { font-size: calc(var(--cell-px) * 0.52); }
+.tile.len2 { font-size: calc(var(--cell-px) * 0.46); }
+.tile.len3 { font-size: calc(var(--cell-px) * 0.37); }
+.tile.len4 { font-size: calc(var(--cell-px) * 0.29); }
+.tile.len5 { font-size: calc(var(--cell-px) * 0.235); }
+.tile.len6 { font-size: calc(var(--cell-px) * 0.19); }
 
 /* 出现和合并 */
 .tile.appear {

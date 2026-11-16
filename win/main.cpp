@@ -205,9 +205,10 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int nCmdShow)
     if (availW <= 0) availW = GetSystemMetrics(SM_CXSCREEN);
     if (availH <= 0) availH = GetSystemMetrics(SM_CYSCREEN);
 
-    // 2048 是竖版布局，窗口偏窄
-    int cw = 430;
-    int ch = 730;
+    // 2048 是竖版布局。宽度按棋盘设计宽度来定：480(棋盘) + 32(页边) + 边框
+    // 这样 Windows 端棋盘尺寸与安卓、浏览器完全一致
+    int cw = 520;
+    int ch = 740;
     if (ch > availH - 30) ch = availH - 30;
     if (cw > availW - 60) cw = availW - 60;
 
