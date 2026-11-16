@@ -1,6 +1,6 @@
 # 2048
 
-> 创建于 2026-11-16 · 一次原型，两套外壳：Windows 桌面版 + 安卓版
+> 创建于 2026-11-16 · 一份原型，两套外壳：Windows 桌面版 + 安卓版
 >
 > 作者：某好心市民
 
@@ -8,63 +8,94 @@
 
 ## 一、项目定位
 
-2048 数字合并游戏。沿用「猜拳对决」验证过的路径：
+2048 数字合并游戏，玩法走标准版：4×4 棋盘、方向键或滑动合并同数字、撤销一步、新游戏二次确认、合并动效、最高分本地保存。
+
+沿用「猜拳对决」验证过的跨端路径：
 
 **一份 HTML 原型做唯一视觉基准 → Windows 外壳（WebView2）→ 安卓外壳（WebView）**
 
-两份外壳都只负责窗口、图标、返回键这类平台差异，玩法逻辑和界面只有一份，永远改 `web/` 里的那套。
+两套外壳只处理窗口、全屏、返回键这类平台差异，玩法和界面只有一份，永远改 `web/` 里的那套。
 
 ---
 
-## 二、目录约定
+## 二、已定方案
 
-| 目录 | 用途 | 状态 |
-|---|---|---|
-| `web/` | 游戏本体，唯一逻辑源 | 待开发 |
-| `web/assets/js/` | 脚本，按职责分文件 | 待开发 |
-| `web/assets/css/` | 样式 | 待开发 |
-| `win/` | Windows 外壳（WebView2 + Win32） | 待开发 |
-| `android/` | 安卓工程（WebView 套壳） | 待开发 |
-| `docs/` | 设计说明、开发日志、复盘 | 待开发 |
+| 项 | 决定 |
+|---|---|
+| 视觉 | Q 版可爱卡通，配色与描边规范对齐「猜拳对决」（马卡龙色 + 3px 粗描边 + 实心偏移投影） |
+| 功能 | 标准版：基础玩法 + 撤销一步 + 新游戏页面内二次确认 + 合并动效 |
+| 安卓 | 只做 WebView 套壳，不写原生绘制 |
+
+---
+
+## 三、目录结构
+
+```
+2048/
+├── web/                      游戏本体，唯一逻辑源
+│   ├── index.html            页面结构
+│   ├── assets/css/style.css  样式（Q 版规范）
+│   ├── assets/js/game.js     纯逻辑：棋盘、移动、合并、计分、撤销
+│   ├── assets/js/app.js      界面层：渲染、动画、键盘与滑动、遮罩、提示
+│   └── test/game.test.js     逻辑单元测试，14 项
+├── win/                      Windows 外壳（C++ + WebView2）
+│   ├── main.cpp              开窗口、挂虚拟域名、加载页面
+│   ├── build.bat             一键编译
+│   └── Game2048.exe          构建产物
+├── android/                  安卓外壳（WebView 套壳）
+│   ├── settings.gradle
+│   ├── build.gradle
+│   ├── gradle.properties
+│   ├── local.properties      sdk.dir，不入库
+│   └── app/
+│       ├── build.gradle      构建时自动把 web/ 同步进 assets
+│       └── src/main/
+│           ├── AndroidManifest.xml
+│           ├── java/com/mhxsm/game2048/MainActivity.java
+│           ├── res/values/{strings,themes}.xml
+│           └── assets/web/   由 syncWeb 任务生成，不入库
+└── docs/
+    └── DEVLOG.md             开发日志
+```
 
 **硬规矩**：JS、CSS 一律放 `assets/` 下对应目录，不内联进 HTML。
 
 ---
 
-## 三、当前状态
+## 四、玩法与规则
 
-**只有骨架，没有代码。**
-
-目录、`.gitignore`、本 README 已就位，等视觉方向定了再动手写原型。
-
----
-
-## 四、待确认的三件事
-
-动手之前需要先定下来，否则后面返工成本很高：
-
-1. **视觉风格**
-   - A：经典 Material 风（米白底 + 2/4/8 递增暖橙到金），认清度最高，一眼就是 2048
-   - B：Q 版可爱卡通（沿用猜拳的马卡龙配色 + 粗描边 + 实心投影），有家族感但与原生 2048 差异大
-
-2. **棋盘尺寸**：4×4 标准，还是要不要给个 3×3 / 5×5 可选（安卓端小屏 4×4 手指按压面积够用）
-
-3. **得分与记录**：只做当局得分 + 最高分，还是加撤销一步、跨会话保存最高分
+- 4×4 棋盘，开局随机放两个方块（2 或 4）
+- 方向键或滑动，整行整列一起挤，相同数字撞上就合并，得分等于合并后的值
+- **一步之内不连锁**：`4 2 2` 左移得到 `4 4`，不会变成 `8`
+- 只保留**一步**撤销，撤销连棋盘、分数、胜负状态一起回退
+- 首次合成 2048 弹胜利遮罩，可以选「接着玩」继续往上堆
+- 无空格且无相邻同值判为死局，遮罩里可以直接撤回一步救回来
+- 最高分存 `localStorage` 的 `g2048.best`
 
 ---
 
-## 五、开发环境
+## 五、三端怎么跑
 
-本机为命令行工具链，未装 Android Studio：
+### 网页原型
 
-| 项 | 路径 / 值 |
-|---|---|
-| JDK | `G:\dev\jdk-17`（构建时必须设 `JAVA_HOME`） |
-| Android SDK | `G:\dev\android-sdk`（platforms `android-35`，build-tools `34.0.0` / `35.0.0`） |
-| Gradle | `G:\dev\gradle-8.9\bin\gradle.bat`，缓存目录 `G:\dev\gradle-home` |
-| 模拟器 | `G:\dev\LDPlayer9`（`dnplayer.exe` / `adb.exe` / `ldconsole.exe`） |
+直接用浏览器打开 `web/index.html`。不用 ES module，两个普通 `<script>` 引脚本，`file://` 下也能跑。
 
-构建命令模板：
+### Windows 版
+
+```powershell
+cd F:\Trae\doubao\2048\win
+cmd /c build.bat
+```
+
+产物是 `win\Game2048.exe`。程序启动后会把 `web/` 目录挂成 `https://game2048.local` 再加载页面，所以：
+
+- `localStorage` 有正常来源，最高分能落盘
+- 改 HTML / CSS / JS 不用重新编译 exe，直接重开程序就能看到
+- `web/` 目录要和 exe 同级（开发时 exe 在 `win\`，程序会自动往上一级找）
+
+依赖：VS2022 BuildTools、WebView2 SDK（`G:\dev\DuiLib_Ultimate-master\3rd\WebView2`）、系统 WebView2 运行时。
+
+### 安卓版
 
 ```powershell
 $env:JAVA_HOME = "G:\dev\jdk-17"
@@ -72,10 +103,70 @@ $env:GRADLE_USER_HOME = "G:\dev\gradle-home"
 & "G:\dev\gradle-8.9\bin\gradle.bat" -p "F:\Trae\doubao\2048\android" assembleDebug --no-daemon --console=plain
 ```
 
+产物是 `android\app\build\outputs\apk\debug\app-debug.apk`。
+
+`assembleDebug` 之前会自动跑 `syncWeb`，把 `web/` 整体同步进 `app/src/main/assets/web`，不用手工复制。
+
+装到设备：
+
+```powershell
+& "G:\dev\android-sdk\platform-tools\adb.exe" install -r "F:\Trae\doubao\2048\android\app\build\outputs\apk\debug\app-debug.apk"
+& "G:\dev\android-sdk\platform-tools\adb.exe" shell am start -n com.mhxsm.game2048/.MainActivity
+```
+
 ---
 
-## 六、变更记录
+## 六、技术要点（可复用到后续项目）
 
-| 日期 | 内容 |
+1. **玩家看到的每一块都是对象，不是数字**
+   `game.js` 的棋盘格子存 `{id, v}`，移动时对象跟着走。界面层靠 `id` 认出「还是原来那一块」，才能做出连续的滑动动画；只存数字的话，每次走完都只能整体重绘，动效无从谈起。
+
+2. **移动结果要带上「谁被谁吃掉」**
+   `move()` 返回 `{moved, gained, pairs:[{dead, into}], spawned, won}`。`pairs` 让界面层能把被合并的方块先滑到目标位置、再消失，而不是原地凭空不见。
+
+3. **动画分两段，中间靠时间片切开**
+   第一段只改所有方块的 `left/top`（含即将消失的），走 `SLIDE_MS`；第二段删掉被吃掉的、更新合并值并弹一下、再新建新方块并淡入。新建方块时先置 `transition: none`，下一帧再恢复，否则会从棋盘左上角滑进来。
+
+4. **坐标全用百分比，不用像素**
+   `PAD / GAP / CELL` 三个常量同时写在 `app.js` 和 CSS 的 `--pad / --gap / --cell` 里，这是唯一需要人工同步的地方。好处是窗口怎么缩放、手机上什么分辨率，方块位置都不用重算。
+
+5. **两端外壳都不内嵌资源，共用同一份 `web/`**
+   Windows 用 `SetVirtualHostNameToFolderMapping` 把目录挂成 https 源，安卓用 Gradle 的 `syncWeb` 任务在构建前拷贝。两处都保证「改一次页面，三端同时生效」。
+
+6. **老内核的兼容写法**
+   `aspect-ratio` 和 `inset` 在 Chromium 88 以下的 WebView 上会失效，棋盘会塌成一条线。CSS 里给了 `@supports not (aspect-ratio: 1/1)` 的 padding 兜底，`inset: 0` 一律写成 `top/right/bottom/left`。
+
+---
+
+## 七、开发环境
+
+本机为命令行工具链，未装 Android Studio：
+
+| 项 | 路径 / 值 |
 |---|---|
-| 2026-11-16 | 建项目骨架：目录结构、`.gitignore`、本 README |
+| JDK | `G:\dev\jdk-17`（构建时必须设 `JAVA_HOME`） |
+| Android SDK | `G:\dev\android-sdk`（platforms `android-35`，build-tools `34.0.0` / `35.0.0`） |
+| Gradle | `G:\dev\gradle-8.9\bin\gradle.bat`，缓存目录 `G:\dev\gradle-home`（已缓存 AGP 8.7.2） |
+| 模拟器 | `G:\dev\LDPlayer9`（`dnplayer.exe` / `adb.exe` / `ldconsole.exe`） |
+| 编译器 | `C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools` |
+| WebView2 SDK | `G:\dev\DuiLib_Ultimate-master\3rd\WebView2` |
+
+---
+
+## 八、已知待补
+
+- 两端都还没有应用图标（`.exe` 用系统默认图标，APK 用默认图标）
+- release 版 APK 还没做签名配置，现在只有 debug 包
+- 没有 `LICENSE` 文件
+
+---
+
+## 九、变更记录
+
+| 日期 | 版本 | 内容 |
+|---|---|---|
+| 2026-11-16 | v0.1 | 建项目骨架：目录结构、`.gitignore`、README |
+| 2026-11-16 | v0.2 | 写完整套 `web/`：页面、Q 版样式、逻辑层、界面层、14 项逻辑测试 |
+| 2026-11-16 | v0.3 | Windows 外壳：`win/main.cpp` + `build.bat`，编译出 `Game2048.exe` 并实测渲染正常 |
+| 2026-11-16 | v0.4 | 安卓外壳：Gradle 工程 + `MainActivity`，`assembleDebug` 通过，产出 24.7 KB APK |
+| 2026-11-16 | v0.5 | 模拟器实测：滑动、键盘、合并、计分、撤销、最高分落盘、新游戏二次确认全部通过；补老内核兼容写法，去掉按钮焦点描边，棋盘放大到 480px |

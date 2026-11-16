@@ -7,6 +7,9 @@ android/**/build/
 android/.gradle/
 dist/
 
+# 安卓端由 syncWeb 任务自动从 web/ 同步，不入库
+android/app/src/main/assets/web/
+
 # 本地环境配置
 local.properties
 
